@@ -1,6 +1,19 @@
 # Warehouse Watcher
 
-This project monitors Snowflake warehouse health and utilization in real-time.
+**Warehouse Watcher** is a tool to monitor Snowflake warehouse health and utilization in real-time, providing insights for better resource management and performance optimization.
+
+## Features
+- **Real-time Monitoring**: Tracks warehouse usage, credit consumption, and performance metrics.
+- **Configurable Alerts**: Set custom thresholds for alerts.
+- **Automated Logging**: Captures periodic logs for analysis and trend observation.
+
+## Setup
+
+### 1. Clone the Repository
+```bash
+git clone <repository_url>
+cd warehouse-watcher
+
 
 ## Setup
 
@@ -41,3 +54,7 @@ This project monitors Snowflake warehouse health and utilization in real-time.
 - `src/config.py`: Configuration handling.
 - `src/warehouse.py`: Functions to fetch warehouse details.
 - `src/monitor.py`: Monitoring script that runs periodically.
+
+To-do 
+Use Streamlit to create interactive dashboards for real-time warehouse utilization and performance metrics.
+features: Display usage trends, peak hours, and alert thresholds in visually interactive charts and tables.
