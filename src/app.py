@@ -1,85 +1,80 @@
 import streamlit as st
-import snowflake.connector
 import pandas as pd
-from datetime import datetime, timedelta
+from warehouse import (
+    fetch_all_warehouses,
+    fetch_warehouse_utilization,
+    fetch_query_spillover,
+    fetch_query_concurrency,
+    fetch_long_running_queries,
+    fetch_warehouse_credit_usage,
+    fetch_query_errors
+)
 
-# Streamlit app title
+# Streamlit app title and description
 st.title("Warehouse Watcher")
-st.markdown("Monitor Snowflake warehouse metrics in real-time.")
+st.markdown("Real-time monitoring of Snowflake warehouse metrics.")
 
-# Sidebar for connection settings
-st.sidebar.header("Warehouse Connection Settings")
-account = st.sidebar.text_input("Snowflake Account", value="your_account_name")
-user = st.sidebar.text_input("Username", value="your_username")
-password = st.sidebar.text_input("Password", type="password")
-warehouse = st.sidebar.text_input("Warehouse Name", value="your_warehouse")
-database = st.sidebar.text_input("Database Name", value="your_database")
-schema = st.sidebar.text_input("Schema Name", value="public")
+# Enhanced Features
+st.header("Warehouse Metrics Dashboard")
 
-@st.cache_data(show_spinner=True)
-def get_snowflake_connection():
-    return snowflake.connector.connect(
-        account=account,
-        user=user,
-        password=password,
-        warehouse=warehouse,
-        database=database,
-        schema=schema
-    )
-
-# Fetch data function
-def fetch_data(query):
-    conn = get_snowflake_connection()
-    with conn.cursor() as cur:
-        cur.execute(query)
-        data = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-    return pd.DataFrame(data, columns=columns)
-
-# Display Warehouse Stats
-st.header("Warehouse Stats")
-
-# Active Queries
-st.subheader("Active Queries")
-active_queries_query = """
-    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, EXECUTION_STATUS, QUEUED_PROVISIONING_TIME, TOTAL_ELAPSED_TIME
-    FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
-    WHERE WAREHOUSE_NAME = '{}' AND EXECUTION_STATUS = 'RUNNING' AND START_TIME >= DATEADD(hour, -1, CURRENT_TIMESTAMP)
-    ORDER BY START_TIME DESC;
-""".format(warehouse)
-active_queries = fetch_data(active_queries_query)
-if not active_queries.empty:
-    st.dataframe(active_queries)
+# Display all warehouses
+st.subheader("Available Warehouses")
+warehouses = fetch_all_warehouses()
+if warehouses:
+    st.table(pd.DataFrame(warehouses, columns=["Name", "State", "Size", "Credits Used", "Created On"]))
 else:
-    st.write("No active queries found.")
+    st.write("No warehouse data available.")
 
-# Warehouse Utilization
-st.subheader("Warehouse Utilization in Last 24 Hours")
-utilization_query = """
-    SELECT TO_TIMESTAMP(HOUR) AS HOUR, AVG(AVG_RUNNING) AS AVG_RUNNING, AVG(AVG_QUEUED_LOAD) AS AVG_QUEUED_LOAD
-    FROM SNOWFLAKE.WAREHOUSE_METERING_HISTORY
-    WHERE WAREHOUSE_NAME = '{}' AND HOUR >= DATEADD(day, -1, CURRENT_TIMESTAMP)
-    GROUP BY HOUR
-    ORDER BY HOUR;
-""".format(warehouse)
-utilization_data = fetch_data(utilization_query)
-if not utilization_data.empty:
-    st.line_chart(utilization_data.set_index("HOUR"))
+# User input for warehouse details
+st.subheader("Warehouse Utilization")
+warehouse_name = st.text_input("Enter warehouse name for utilization details", "")
+if warehouse_name:
+    utilization = fetch_warehouse_utilization(warehouse_name)
+    if utilization:
+        st.table(pd.DataFrame([utilization], columns=["Name", "State", "Size", "Credits Used", "Created On"]))
+    else:
+        st.write(f"No utilization data available for warehouse '{warehouse_name}'.")
+
+# Query spillover
+st.subheader("Query Spillover")
+spillover_data = fetch_query_spillover()
+if spillover_data:
+    st.table(pd.DataFrame(spillover_data, columns=["Query ID", "Warehouse Name", "Spilled Bytes", "Spilled Partitions"]))
 else:
-    st.write("No utilization data found.")
+    st.write("No query spillover data available.")
 
-# Recent Query History
-st.subheader("Recent Query History")
-recent_queries_query = """
-    SELECT QUERY_ID, USER_NAME, WAREHOUSE_NAME, EXECUTION_STATUS, TOTAL_ELAPSED_TIME, START_TIME
-    FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
-    WHERE WAREHOUSE_NAME = '{}' AND START_TIME >= DATEADD(day, -1, CURRENT_TIMESTAMP)
-    ORDER BY START_TIME DESC;
-""".format(warehouse)
-recent_queries = fetch_data(recent_queries_query)
-if not recent_queries.empty:
-    st.dataframe(recent_queries)
+# Query concurrency
+st.subheader("Query Concurrency")
+concurrency_data = fetch_query_concurrency()
+if concurrency_data:
+    st.table(pd.DataFrame(concurrency_data, columns=["Start Time", "Warehouse Name", "Concurrent Queries"]))
 else:
-    st.write("No recent query history found.")
+    st.write("No query concurrency data available.")
 
-st.sidebar.markdown("Note: Ensure you have the required Snowflake permissions.")
+# Long-running queries
+st.subheader("Long-Running Queries")
+threshold_seconds = st.number_input("Set threshold for long-running queries (seconds)", min_value=60, value=300, step=60)
+long_running_queries = fetch_long_running_queries(threshold_seconds)
+if long_running_queries:
+    st.table(pd.DataFrame(long_running_queries, columns=["Query ID", "Warehouse Name", "User Name", "Execution Status", "Elapsed Time (s)"]))
+else:
+    st.write(f"No long-running queries exceeding {threshold_seconds} seconds.")
+
+# Warehouse credit usage
+st.subheader("Warehouse Credit Usage")
+credit_usage = fetch_warehouse_credit_usage()
+if credit_usage:
+    st.table(pd.DataFrame(credit_usage, columns=["Warehouse Name", "Total Credits Used"]))
+else:
+    st.write("No credit usage data available.")
+
+# Query errors
+st.subheader("Recent Query Errors")
+query_errors = fetch_query_errors()
+if query_errors:
+    st.table(pd.DataFrame(query_errors, columns=["Query ID", "User Name", "Error Code", "Error Message"]))
+else:
+    st.write("No recent query errors found.")
+
+# Note for user
+st.sidebar.info("Ensure Snowflake permissions are configured for data access.")
